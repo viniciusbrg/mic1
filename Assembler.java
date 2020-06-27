@@ -65,7 +65,7 @@ class Assembler {
             final String currentLine = fileLines.get(i);
 
             // split lines by whitespace
-            final String[] components = currentLine.trim().split("\\s+");
+            final String[] components = currentLine.trim().toLowerCase().split("\\s+");
 
             int mnemonicPosition = 0;
             // check if first element is label or direct instruction
@@ -78,20 +78,25 @@ class Assembler {
             }
 
             final InstructionInfo instructionInfo = mnemonics.get(components[mnemonicPosition]);
+
+            if (instructionInfo == null) {
+                throw new Error("couldn't decode instruction: '" + currentLine + "' on line " + i + 1);
+            }
+
             currentBytes += instructionInfo.size;
         }
 
         // header: 4 bytes, 20 initialization bytes, and currentBytes - 1 to contain program.
         // - 1 because current bytes also counts the first byte (which will be at position 1024, and skipped)
         // so we're going to write only the currentBytes - 1 bytes to the file and write it from position 1025.
-        final int expectedProgramSize = HEADER_BYTES + INITIALIZATION_BYTES + currentBytes - 1;
+        final int expectedTotalSize = HEADER_BYTES + INITIALIZATION_BYTES + currentBytes - 1;
 
         // second step: now locate variables, we find labels first so we don't assume a label name is a new variable.
         for (int i = 0; i < fileLines.size(); i++) {
             final String currentLine = fileLines.get(i);
 
             // split lines by whitespace
-            final String[] components = currentLine.trim().split("\\s+");
+            final String[] components = currentLine.trim().toLowerCase().split("\\s+");
 
             int instructionStart = 0;
 
@@ -106,7 +111,7 @@ class Assembler {
             final InstructionInfo instructionInfo = mnemonics.get(currentInstruction);
 
             if (instructionInfo == null) {
-                throw new Error("couldn't decode instruction: " + currentInstruction + " on line " + i);
+                throw new Error("couldn't decode instruction: '" + currentLine + "' on line " + i + 1);
             }
 
             if (instructionInfo.hasOperands) {
@@ -124,12 +129,15 @@ class Assembler {
             }
         }
 
-        final byte[] programBytes = new byte[expectedProgramSize];
+        final byte[] programBytes = new byte[expectedTotalSize];
         // write header
-        programBytes[3] = (byte) (expectedProgramSize >> 24);
-        programBytes[2] = (byte) (expectedProgramSize >> 16);
-        programBytes[1] = (byte) (expectedProgramSize >> 8);
-        programBytes[0] = (byte) expectedProgramSize;
+        // total program size is Header bytes + init bytes + program bytes
+        // on the header we should write the init bytes + program bytes size.
+        final int headerValue = expectedTotalSize - HEADER_BYTES;
+        programBytes[3] = (byte) (headerValue >> 24);
+        programBytes[2] = (byte) (headerValue >> 16);
+        programBytes[1] = (byte) (headerValue >> 8);
+        programBytes[0] = (byte) headerValue;
 
         // write initialization bytes, positions [4, 23]
         final int LV_ADDRESS = 0x1001;
@@ -161,7 +169,7 @@ class Assembler {
 
         currentBytes = 1;
         for (final String line : fileLines) {
-            final String[] components = line.trim().split("\\s+");
+            final String[] components = line.trim().toLowerCase().split("\\s+");
 
             int instructionStart = 0;
 
