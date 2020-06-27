@@ -5,6 +5,7 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Scanner;
 
 class Assembler {
     final int HEADER_BYTES = 4;
@@ -308,8 +309,20 @@ class Assembler {
     }
 
     public static void main(String[] args) throws IOException {
-        final String fileName = args[0];
-        final String outputName = args[1];
+        String fileName;
+        String outputName;
+
+        if (args.length >= 2) {
+            fileName = args[0];
+            outputName = args[1];
+        } else {
+            final Scanner scanner = new Scanner(System.in);
+            System.out.println("Enter input file name: ");
+            fileName = scanner.nextLine();
+            System.out.println("Enter output file name: ");
+            outputName = scanner.nextLine();
+        }
+
         final Path filePath = Paths.get(fileName);
         final Path outputPath = Paths.get(outputName);
         final List<String> lines = Files.readAllLines(filePath);
