@@ -31,7 +31,11 @@ class Assembler {
         instructionsMap.put("nop", new InstructionInfo(false, false, (byte) 0x01, 1));
         instructionsMap.put("pop", new InstructionInfo(false, false, (byte) 0x10, 1));
         instructionsMap.put("swap", new InstructionInfo(false, false, (byte) 0x13, 1));
-        instructionsMap.put("wide", new InstructionInfo(false, false, (byte) 0x28, 1));
+
+        // we assume this has operands, because this instruction should come in the form
+        // wide istore <varnum> or wide iload <varnum>, wide acts as a modifier.
+        // size: 4 - wide opcode (1 byte) + istore or iload opcode (1 byte) + 2 bytes operands
+        instructionsMap.put("wide", new InstructionInfo(true, false, (byte) 0x28, 1 + 1 + 2));
 
 
         // this instruction has 2 operands instead of one operand, like other instructions.
@@ -189,9 +193,85 @@ class Assembler {
             programBytes[currentPosition] = instructionInfo.code;
             currentPosition += 1;
 
-            // write operands, if available
             instructionStart++;
-            if (instructionInfo.hasOperands) {
+
+            // write operands if available. Few instructions have 2 byte operands, so we
+            // treat them exceptionally. Wide acts as modifier to iload or istore, making them use a 2 byte
+            // operand. invokevirtual or ldc_w also have 2 byte operands.
+            // There is also iinc which has 2 operands instead of one (this is the only
+            // instruction which takes 2 operands)
+            // Jumps also have 2 byte operands, but there is a small bug where we have to write them as big endian,
+            // so we also have a special case for them.
+            if (currentInstruction.equals("wide")) {
+                /*
+                  Special case!!!
+                  We can have wide instructions:
+                  wide iload or wide istore
+                  Following the book,
+                  we should encode
+                  wide opcode + (iload or istore opcode) + operand (varnum) as 2 bytes.
+                  So we'll handle this special case here.
+                 */
+                final String operation = components[instructionStart];
+
+                if (!operation.equals("istore") && !operation.equals("iload")) {
+                    throw new Error("iload or istore should come after wide. Got: '" + line + "'");
+                }
+
+                // figure out opcode for operation
+                final InstructionInfo operationData = mnemonics.get(operation);
+
+                // get variable name
+                instructionStart++;
+                final String variableName = components[instructionStart];
+
+                if (!variableToVarindex.containsKey(variableName)) {
+                    throw new Error("couldn't find variable " + variableName + " for instruction " + line);
+                }
+
+                // get varindex
+                final int varIndex = variableToVarindex.get(variableName);
+
+                // now we should write operation opcode (1 byte) + varindex as 2 bytes = 3 bytes
+                programBytes[currentPosition] = operationData.code;
+                programBytes[currentPosition + 1] = (byte) varIndex;
+                programBytes[currentPosition + 2] = (byte) (varIndex >> 8);
+                currentPosition += 3;
+            } else if (currentInstruction.equals("invokevirtual") || currentInstruction.equals("ldc_w")) {
+                // these instructions aren't jumps but have 2 bytes operands, so their full size is 3 bytes
+                // 1 byte opcode + 2 byte operand
+                // the opcode has already been written, so we just have to put the operand, which should be a number
+                final String operandString = components[instructionStart];
+
+                try {
+                    final int operand = Integer.parseInt(operandString);
+                    programBytes[currentPosition] = (byte) operand;
+                    programBytes[currentPosition + 1] = (byte) (operand >> 8);
+                    currentPosition += 2;
+                } catch (NumberFormatException e) {
+                    throw new Error("expected numeric operand but got non-numeric operand at line '" + line + "'");
+                }
+            } else if(currentInstruction.equals("iinc")) {
+                // this is the only instruction which take two operands, both with 1 byte.
+                // so for this case we should have something like iinc <variableName> <constant>
+                // constant is just a value. For the variable, we should write the varIndex.
+                // we've already written opcode, so we just have to write operands.
+                final String variableName = components[instructionStart];
+                final String constantUnparsed = components[instructionStart + 1];
+
+                if (!variableToVarindex.containsKey(variableName)) {
+                    throw new Error("couldn't find variable " + variableName + " for line '" + line + "'");
+                }
+
+                final int varIndex = variableToVarindex.get(variableName);
+                final int constant = Integer.parseInt(constantUnparsed);
+
+                programBytes[currentPosition] = (byte) varIndex;
+                programBytes[currentPosition + 1] = (byte) constant;
+                currentPosition += 2;
+            } else if (instructionInfo.hasOperands) {
+                // remaining instructions follow same format, so we can just parse them following these steps
+
                 // here we can have labels, variables or values;
                 // only jumps have labels, so we can verify that first.
                 final String currentValue = components[instructionStart];
