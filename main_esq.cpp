@@ -227,9 +227,16 @@ void load_microprog_aulas() {
 
 //carrega programa na memória principal para ser executado pelo emulador.
 //programa escrito em linguagem de máquina (binário) direto na memória principal (array memory declarado mais acima).
-void load_prog() {
+void load_prog(char *file_name) {
     //implementar!
-    FILE *prog_file  = fopen("test.bin", "rb");
+    FILE *prog_file;
+
+    if (file_name == NULL) {
+        // open default file
+        prog_file = fopen("prog.bin", "rb");
+    } else {
+        prog_file = fopen(file_name, "rb");
+    }
 
     if (prog_file == NULL) {
         printf("Problema na leitura do arquivo. Abortando...");
@@ -649,7 +656,13 @@ int main(int argc, char* argv[])
 {
     load_microprog(); //carrega microprograma de controle
 
-    load_prog(); //carrega programa na memória principal a ser executado pelo emulador. Já que não temos entrada e saída, jogamos o programa direto na memória ao executar o emulador.
+    //carrega programa na memória principal a ser executado pelo emulador. Já que não temos entrada e saída, jogamos o programa direto na memória ao executar o emulador.
+    if (argc >= 2) {
+        load_prog(argv[1]);
+    } else {
+        // ler arquivo padrão
+        load_prog(NULL);
+    }
 
     decoded_microcode decmcode;
 
